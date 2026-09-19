@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, Dashboard as D } from "../api";
+import { api, Dashboard as D, Health } from "../api";
 
 // DESIGN.md §5.1: 数字の羅列で十分。グラフは作らない。
 export default function Dashboard() {
   const [d, setD] = useState<D | null>(null);
+  const [h, setH] = useState<Health | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const load = () => api.dashboard().then(setD).catch((e) => setErr(String(e)));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.health().then(setH).catch(() => {}); }, []);
 
   const fetchIpa = async () => {
     setBusy(true); setMsg("IPA から取得中（約45ファイル、数分かかります）…");
@@ -26,6 +27,18 @@ export default function Dashboard() {
 
   return (
     <main className="max-w-3xl mx-auto p-4 space-y-6">
+      {h && !h.db_persistent && (
+        <div className="border border-red-400 bg-red-50 rounded p-3 text-sm">
+          <b>DB が未設定です。</b>答案・採点・弱点の記録は保存されず、しばらくすると消えます。
+          Vercel のプロジェクト → Storage → Create Database → <b>Neon (Postgres)</b> を追加して再デプロイしてください（DATABASE_URL が自動で入ります）。
+        </div>
+      )}
+      {h && !h.has_api_key && (
+        <div className="border border-amber-400 bg-amber-50 rounded p-3 text-sm">
+          <b>ANTHROPIC_API_KEY が未設定です。</b>演習はできますが AI 採点が動きません。
+          Vercel のプロジェクト → Settings → Environment Variables に追加して再デプロイしてください。
+        </div>
+      )}
       <section className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded border p-4">
           <div className="text-sm text-neutral-500">科目A まで</div>

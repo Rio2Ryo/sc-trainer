@@ -31,7 +31,13 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json();
 }
 
+export type Health = {
+  ok: boolean; vercel: boolean; db: string; db_persistent: boolean; has_api_key: boolean;
+  bundled_materials: boolean; grader_model: string;
+};
+
 export const api = {
+  health: () => req<Health>("/api/health"),
   dashboard: () => req<Dashboard>("/api/dashboard"),
   questions: () => req<Question[]>("/api/kamoku-b/questions"),
   byExam: (exam: string, qno: number) => req<{ id: number; exam: string; qno: number; theme: string | null }>(`/api/kamoku-b/by-exam/${encodeURIComponent(exam)}/${qno}`),

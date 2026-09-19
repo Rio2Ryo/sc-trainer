@@ -49,7 +49,9 @@ def extract_themes(cmnt_text: str) -> dict[int, str]:
     return themes
 
 
-def build(ipa_dir: Path = IPA_DIR) -> dict:
+def collect(ipa_dir: Path = IPA_DIR, pages_root: Path | None = None,
+            dpi: int = 200, fmt: str = "png") -> list[dict]:
+    """PDF 群から 20 問分のメタ（DB 非依存）を作る。ビルド時同梱と実行時投入の両方で使う。"""
     groups: dict[str, dict[str, Path]] = {}
     for pdf in sorted(ipa_dir.glob("*.pdf")):
         info = parse_name(pdf.name)
@@ -57,45 +59,61 @@ def build(ipa_dir: Path = IPA_DIR) -> dict:
             continue
         groups.setdefault(info["exam"], {})[info["kind"].lower()] = pdf
 
-    inserted = 0
-    report: dict[str, dict] = {}
+    items: list[dict] = []
+    for exam, files in sorted(groups.items()):
+        qs = files.get("qs")
+        if not qs:
+            continue
+        qs_info = ingest(qs, kind="ipa", pages_root=pages_root, dpi=dpi, fmt=fmt)
+        ans_md = cmnt_md = None
+        themes: dict[int, str] = {}
+        if "ans" in files:
+            r = ingest(files["ans"], kind="ipa", pages_root=pages_root)
+            if r.get("markdown"):
+                ans_md = Path(r["markdown"]).read_text(encoding="utf-8")
+        if "cmnt" in files:
+            r = ingest(files["cmnt"], kind="ipa", pages_root=pages_root)
+            if r.get("markdown"):
+                cmnt_md = Path(r["markdown"]).read_text(encoding="utf-8")
+                themes = extract_themes(cmnt_md)
+        for qno in range(1, 5):
+            items.append({
+                "exam": exam, "qno": qno, "theme": themes.get(qno),
+                "qs_pdf": str(qs), "qs_pages": qs_info.get("pages_dir"),
+                "ans_md": ans_md, "cmnt_md": cmnt_md,
+                "_qs_kind": qs_info["kind"], "_pages": qs_info.get("page_count"),
+            })
+    return items
+
+
+def upsert(items: list[dict]) -> int:
+    """メタを kamoku_b_question に投入する（既存は更新）。"""
+    n = 0
     with get_db() as conn:
-        for exam, files in sorted(groups.items()):
-            qs = files.get("qs")
-            if not qs:
-                report[exam] = {"error": "問題PDFなし"}
-                continue
-            qs_info = ingest(qs, kind="ipa")
-            qs_pages = qs_info.get("pages_dir")
-            ans_md = cmnt_md = None
-            themes: dict[int, str] = {}
-            if "ans" in files:
-                r = ingest(files["ans"], kind="ipa")
-                if r.get("markdown"):
-                    ans_md = Path(r["markdown"]).read_text(encoding="utf-8")
-            if "cmnt" in files:
-                r = ingest(files["cmnt"], kind="ipa")
-                if r.get("markdown"):
-                    cmnt_md = Path(r["markdown"]).read_text(encoding="utf-8")
-                    themes = extract_themes(cmnt_md)
-            for qno in range(1, 5):
-                conn.execute(
-                    """INSERT INTO kamoku_b_question(exam, qno, theme, qs_pdf, qs_pages, ans_md, cmnt_md)
-                       VALUES (?,?,?,?,?,?,?)
-                       ON CONFLICT(exam, qno) DO UPDATE SET
-                         theme=excluded.theme, qs_pdf=excluded.qs_pdf, qs_pages=excluded.qs_pages,
-                         ans_md=excluded.ans_md, cmnt_md=excluded.cmnt_md""",
-                    (exam, qno, themes.get(qno), str(qs), qs_pages, ans_md, cmnt_md),
-                )
-                inserted += 1
-            report[exam] = {
-                "qs_kind": qs_info["kind"],
-                "pages": qs_info.get("page_count"),
-                "themes": themes,
-                "has_ans": ans_md is not None,
-                "has_cmnt": cmnt_md is not None,
-            }
-    return {"questions_upserted": inserted, "exams": report}
+        for it in items:
+            conn.execute(
+                """INSERT INTO kamoku_b_question(exam, qno, theme, qs_pdf, qs_pages, ans_md, cmnt_md)
+                   VALUES (?,?,?,?,?,?,?)
+                   ON CONFLICT(exam, qno) DO UPDATE SET
+                     theme=excluded.theme, qs_pdf=excluded.qs_pdf, qs_pages=excluded.qs_pages,
+                     ans_md=excluded.ans_md, cmnt_md=excluded.cmnt_md""",
+                (it["exam"], it["qno"], it["theme"], it["qs_pdf"], it["qs_pages"], it["ans_md"], it["cmnt_md"]),
+            )
+            n += 1
+    return n
+
+
+def build(ipa_dir: Path = IPA_DIR) -> dict:
+    """ローカル用：data/ipa の PDF を data/pages に変換して DB に投入。"""
+    items = collect(ipa_dir)
+    n = upsert(items)
+    report: dict[str, dict] = {}
+    for it in items:
+        rep = report.setdefault(it["exam"], {"qs_kind": it["_qs_kind"], "pages": it["_pages"], "themes": {},
+                                             "has_ans": it["ans_md"] is not None, "has_cmnt": it["cmnt_md"] is not None})
+        if it["theme"]:
+            rep["themes"][it["qno"]] = it["theme"]
+    return {"questions_upserted": n, "exams": report}
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", tags=["dashboard"])
 
 def _review_streak(conn) -> int:
     days = {
-        r[0][:10]
+        str(r[0])[:10]
         for r in conn.execute("SELECT reviewed_at FROM review_log").fetchall()
         if r[0]
     }
@@ -37,11 +37,11 @@ def dashboard() -> dict:
         due = conn.execute("SELECT COUNT(*) FROM card WHERE due <= ?", (now,)).fetchone()[0]
         total_q = conn.execute("SELECT COUNT(*) FROM kamoku_b_question").fetchone()[0]
         done_q = conn.execute(
-            "SELECT COUNT(DISTINCT question_id) FROM attempt WHERE revealed=1"
+            "SELECT COUNT(DISTINCT question_id) FROM attempt WHERE revealed=TRUE"
         ).fetchone()[0]
         avg = conn.execute("SELECT AVG(score_pct) FROM grade WHERE score_pct IS NOT NULL").fetchone()[0]
         top = conn.execute(
-            "SELECT label, count FROM weakness WHERE resolved=0 AND count>0 ORDER BY count DESC, last_seen DESC LIMIT 3"
+            "SELECT label, count FROM weakness WHERE resolved=FALSE AND count>0 ORDER BY count DESC, last_seen DESC LIMIT 3"
         ).fetchall()
         last = conn.execute(
             "SELECT g.next_fix, g.graded_at, q.exam, q.qno FROM grade g "
@@ -57,7 +57,7 @@ def dashboard() -> dict:
         "review_streak_days": streak,
         "kamoku_b": {"total": total_q, "done": done_q, "avg_score_pct": round(avg) if avg is not None else None},
         "top_weakness": [dict(r) for r in top],
-        "next_fix": dict(last) if last else None,
+        "next_fix": {**dict(last), "graded_at": str(last["graded_at"])} if last else None,
     }
 
 
@@ -67,5 +67,6 @@ def weakness():
         rows = conn.execute(
             "SELECT id, label, count, last_seen, resolved FROM weakness ORDER BY resolved, count DESC, last_seen DESC"
         ).fetchall()
-    return [WeaknessOut(id=r["id"], label=r["label"], count=r["count"], last_seen=r["last_seen"], resolved=bool(r["resolved"]))
+    return [WeaknessOut(id=r["id"], label=r["label"], count=r["count"],
+                        last_seen=None if r["last_seen"] is None else str(r["last_seen"]), resolved=bool(r["resolved"]))
             for r in rows]

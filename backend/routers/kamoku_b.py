@@ -11,11 +11,17 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from ..config import PUBLIC_MATERIALS_BASE
 from ..db import get_db
 from ..models import AttemptIn, AttemptOut, GradeOut, QuestionOut
 from ..services.grader import grade_attempt
+from ..services.materials import page_count
 
 router = APIRouter(prefix="/api/kamoku-b", tags=["kamoku-b"])
+
+
+def _s(v) -> str | None:
+    return None if v is None else str(v)
 
 
 def _row_to_attempt(r) -> AttemptOut:
@@ -25,7 +31,7 @@ def _row_to_attempt(r) -> AttemptOut:
         body=json.loads(r["body"]),
         diagram_mmd=r["diagram_mmd"],
         minutes=r["minutes"],
-        submitted_at=r["submitted_at"],
+        submitted_at=_s(r["submitted_at"]),
         revealed=bool(r["revealed"]),
     )
 
@@ -37,14 +43,14 @@ def list_questions():
             """SELECT q.id, q.exam, q.qno, q.theme, q.qs_pages,
                       COUNT(a.id) AS attempts, MAX(g.score_pct) AS best_score
                FROM kamoku_b_question q
-               LEFT JOIN attempt a ON a.question_id=q.id AND a.revealed=1
+               LEFT JOIN attempt a ON a.question_id=q.id AND a.revealed=TRUE
                LEFT JOIN grade g ON g.attempt_id=a.id
-               GROUP BY q.id ORDER BY q.exam DESC, q.qno"""
+               GROUP BY q.id, q.exam, q.qno, q.theme, q.qs_pages ORDER BY q.exam DESC, q.qno"""
         ).fetchall()
     return [
         QuestionOut(
             id=r["id"], exam=r["exam"], qno=r["qno"], theme=r["theme"],
-            has_pages=bool(r["qs_pages"] and Path(r["qs_pages"]).exists()),
+            has_pages=bool(r["qs_pages"] and (Path(r["qs_pages"]).exists() or PUBLIC_MATERIALS_BASE)),
             attempts=r["attempts"], best_score=r["best_score"],
         )
         for r in rows
@@ -73,21 +79,28 @@ def pages(qid: int) -> list[str]:
     with get_db() as conn:
         q = _get_question(conn, qid)
     d = Path(q["qs_pages"]) if q["qs_pages"] else None
-    if not d or not d.exists():
+    if not d:
         return []
-    return [f"/api/kamoku-b/{qid}/pages/{p.name}" for p in sorted(d.glob("p*.png"))]
+    if d.exists():
+        names = sorted(p.name for p in d.iterdir() if p.suffix in (".png", ".jpg"))
+    else:
+        names = [f"p{i:03d}.jpg" for i in range(1, (page_count(q["exam"]) or 0) + 1)]
+    if PUBLIC_MATERIALS_BASE:
+        # ビルド時に同梱した静的ファイルを直接配信（Vercel）
+        return [f"{PUBLIC_MATERIALS_BASE}/pages/{d.name}/{n}" for n in names]
+    return [f"/api/kamoku-b/{qid}/pages/{n}" for n in names]
 
 
 @router.get("/{qid}/pages/{name}")
 def page_image(qid: int, name: str):
-    if "/" in name or ".." in name or not name.endswith(".png"):
+    if "/" in name or ".." in name or not name.endswith((".png", ".jpg")):
         raise HTTPException(400, "bad name")
     with get_db() as conn:
         q = _get_question(conn, qid)
     p = Path(q["qs_pages"]) / name
     if not p.exists():
         raise HTTPException(404, "page not found")
-    return FileResponse(p, media_type="image/png")
+    return FileResponse(p, media_type="image/jpeg" if name.endswith(".jpg") else "image/png")
 
 
 @router.post("/{qid}/attempt", response_model=AttemptOut)
@@ -98,11 +111,11 @@ def submit_attempt(qid: int, body: AttemptIn):
     now = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         _get_question(conn, qid)
-        cur = conn.execute(
-            "INSERT INTO attempt(question_id, body, diagram_mmd, minutes, submitted_at, revealed) VALUES (?,?,?,?,?,1)",
+        new_id = conn.insert(
+            "INSERT INTO attempt(question_id, body, diagram_mmd, minutes, submitted_at, revealed) VALUES (?,?,?,?,?,TRUE)",
             (qid, json.dumps(body.body, ensure_ascii=False), body.diagram_mmd, body.minutes, now),
         )
-        r = conn.execute("SELECT * FROM attempt WHERE id=?", (cur.lastrowid,)).fetchone()
+        r = conn.execute("SELECT * FROM attempt WHERE id=?", (new_id,)).fetchone()
     return _row_to_attempt(r)
 
 
@@ -119,7 +132,7 @@ def answer(qid: int) -> dict:
     with get_db() as conn:
         q = _get_question(conn, qid)
         ok = conn.execute(
-            "SELECT 1 FROM attempt WHERE question_id=? AND revealed=1 LIMIT 1", (qid,)
+            "SELECT 1 FROM attempt WHERE question_id=? AND revealed=TRUE LIMIT 1", (qid,)
         ).fetchone()
     if not ok:
         raise HTTPException(404, "答案を確定するまで解答例は開けません")
@@ -144,6 +157,6 @@ def get_grades(attempt_id: int):
         rows = conn.execute("SELECT * FROM grade WHERE attempt_id=? ORDER BY id DESC", (attempt_id,)).fetchall()
     return [
         GradeOut(id=r["id"], attempt_id=r["attempt_id"], detail=json.loads(r["detail"]),
-                 score_pct=r["score_pct"], next_fix=r["next_fix"], graded_at=r["graded_at"])
+                 score_pct=r["score_pct"], next_fix=r["next_fix"], graded_at=str(r["graded_at"]))
         for r in rows
     ]

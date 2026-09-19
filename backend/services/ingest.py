@@ -72,35 +72,43 @@ def to_markdown(pdf_path: Path, out_dir: Path) -> Path:
     return md_path
 
 
-def to_page_images(pdf_path: Path, out_dir: Path, dpi: int = IMAGE_DPI) -> list[Path]:
-    """テキスト層のない PDF をページ画像にする。既に揃っていれば再生成しない。"""
+def to_page_images(pdf_path: Path, out_dir: Path, dpi: int = IMAGE_DPI, fmt: str = "png") -> list[Path]:
+    """テキスト層のない PDF をページ画像にする。既に揃っていれば再生成しない。
+
+    fmt="jpg" は同梱・配信用（ファイルサイズを小さくする）。ローカルは png の 200dpi。
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
     paths: list[Path] = []
     zoom = dpi / 72
     mat = fitz.Matrix(zoom, zoom)
     for i, page in enumerate(doc, start=1):
-        p = out_dir / f"p{i:03d}.png"
+        p = out_dir / f"p{i:03d}.{fmt}"
         if not p.exists():
-            page.get_pixmap(matrix=mat, alpha=False).save(p)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            if fmt == "jpg":
+                pix.save(p, jpg_quality=80)
+            else:
+                pix.save(p)
         paths.append(p)
     doc.close()
     return paths
 
 
-def ingest(pdf_path: Path, kind: str = "book") -> dict:
+def ingest(pdf_path: Path, kind: str = "book", pages_root: Path | None = None,
+           dpi: int = IMAGE_DPI, fmt: str = "png") -> dict:
     """判定→変換。結果のメタを返す（DB への登録は build_index 側が担う）。"""
     pdf_path = Path(pdf_path)
     if not pdf_path.exists():
         raise FileNotFoundError(pdf_path)
     info = classify(pdf_path)
-    out_dir = PAGES_DIR / pdf_path.stem
+    out_dir = (pages_root or PAGES_DIR) / pdf_path.stem
     result = {"file": str(pdf_path), "kind_hint": kind, **info}
     if info["kind"] == "text":
         md = to_markdown(pdf_path, out_dir)
         result["markdown"] = str(md)
     else:
-        pages = to_page_images(pdf_path, out_dir)
+        pages = to_page_images(pdf_path, out_dir, dpi=dpi, fmt=fmt)
         result["pages_dir"] = str(out_dir)
         result["page_count"] = len(pages)
     (out_dir / "ingest.json").parent.mkdir(parents=True, exist_ok=True)

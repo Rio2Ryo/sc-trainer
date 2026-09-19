@@ -54,18 +54,23 @@ python -m backend.services.ingest data/books/xxx.pdf
 - 採点時は問題 PDF 全体を API に送っている。コストが上振れしたら該当ページだけ送る最適化を入れる余地がある（DESIGN.md §8）
 - 採点モデルは `.env` の `SC_GRADER_MODEL` で差し替え可能（既定 `claude-sonnet-4-6`）
 
-## Vercel で試す（デモ用途）
+## Vercel で使う
 
-DESIGN.md §7 は「デプロイしない」なので、これは**動作を見るためのデモ**扱い。Vercel はサーバレスで永続ディスクがないため、次の制約がある。
+Vercel はサーバレスで永続ディスクがないため、次の2点で対応している。
 
-- SQLite と取得した PDF・ページ画像は `/tmp` に置かれ、**関数の再起動で消える**（答案・採点履歴も残らない）
-- 購入・自炊した教材（`data/books/`）は絶対にアップロードしない（DESIGN.md §0 原則4）
-- IPA 取得（45ファイル）と AI 採点は数分かかるので、`vercel.json` で `maxDuration: 300` にしている。プランで上限が低い場合は値を下げる（その場合は取得を年度ごとに分けるなどの工夫が要る）
+- **過去問はビルド時に同梱**する。`vercel.json` の buildCommand が `scripts/build_materials.py` を実行し、IPA 公式 PDF の取得→ページ画像化（150dpi JPEG）→テーマ索引を `frontend/public/materials/` に生成して静的配信する。実行時の取得は不要
+- **記録は Postgres に保存**する。`DATABASE_URL`（または `POSTGRES_URL`）があれば Postgres、無ければ SQLite（Vercel では `/tmp` なので消える）
 
-手順：
+セットアップ（初回のみ）：
 
-1. https://vercel.com/new で `Rio2Ryo/sc-trainer` を Import（設定は `vercel.json` が持っているので Framework Preset は Other のまま）
-2. Environment Variables に `ANTHROPIC_API_KEY` を追加（採点に必要。未設定でも画面は動く）
-3. Deploy
+1. https://vercel.com/new で `Rio2Ryo/sc-trainer` を Import（Framework Preset は Other）
+2. プロジェクト → **Storage → Create Database → Neon (Postgres)** を追加。`DATABASE_URL` が自動で環境変数に入る
+3. プロジェクト → **Settings → Environment Variables** に `ANTHROPIC_API_KEY` を追加
+4. Deployments から Redeploy
 
-構成：`api/index.py` が FastAPI を Vercel Python Function として公開し、`/api/*` をそこへ、それ以外を `frontend/dist/index.html` へ rewrite している。
+未設定の項目はダッシュボード上部に赤／黄色で警告が出る。`/api/health` でも確認できる。
+
+注意：
+
+- 購入・自炊した教材（`data/books/`）は Vercel に上げない（DESIGN.md §0 原則4）。同梱するのは IPA が公開している PDF だけ
+- AI 採点は 1〜2 分かかるので `maxDuration: 300` にしている。プランの上限が低い場合は値を下げる

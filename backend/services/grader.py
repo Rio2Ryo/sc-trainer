@@ -15,6 +15,7 @@ import anthropic
 
 from ..config import GRADER_MODEL, PROMPTS_DIR
 from ..db import get_db
+from .materials import read_material
 
 MAX_PAGE_IMAGES = 40  # PDF が送れない場合のフォールバック上限
 
@@ -27,13 +28,15 @@ def _known_weaknesses(conn) -> list[dict]:
     rows = conn.execute(
         "SELECT label, count, resolved FROM weakness ORDER BY resolved, count DESC"
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [{"label": r["label"], "count": r["count"], "resolved": bool(r["resolved"])} for r in rows]
 
 
 def _question_block(q) -> dict:
     """問題 PDF を document ブロックにする。テキスト層がないので API 側で画像として読まれる。"""
-    pdf = Path(q["qs_pdf"])
-    data = base64.b64encode(pdf.read_bytes()).decode("ascii")
+    raw = read_material(q["qs_pdf"])
+    if raw is None:
+        raise FileNotFoundError(f"問題 PDF が見つかりません: {q['qs_pdf']}")
+    data = base64.b64encode(raw).decode("ascii")
     return {
         "type": "document",
         "source": {"type": "base64", "media_type": "application/pdf", "data": data},
@@ -130,32 +133,31 @@ def _persist(attempt_id: int, result: dict, known: list[dict]) -> dict:
     score = int(score) if isinstance(score, (int, float)) else None
 
     with get_db() as conn:
-        cur = conn.execute(
+        grade_id = conn.insert(
             "INSERT INTO grade(attempt_id, detail, score_pct, next_fix) VALUES (?,?,?,?)",
             (attempt_id, json.dumps(result, ensure_ascii=False), score, next_fix),
         )
-        grade_id = cur.lastrowid
         # 再発: count+1、resolved を戻す、連続クリーンをリセット
         for label in recurring:
             conn.execute(
-                "UPDATE weakness SET count=count+1, last_seen=?, resolved=0, clean_streak=0 WHERE label=?",
+                "UPDATE weakness SET count=count+1, last_seen=?, resolved=FALSE, clean_streak=0 WHERE label=?",
                 (now, label),
             )
         # 新規
         for label in new_w:
             conn.execute(
-                "INSERT OR IGNORE INTO weakness(label, count, last_seen, resolved, clean_streak) VALUES (?,1,?,0,0)",
+                "INSERT INTO weakness(label, count, last_seen, resolved, clean_streak) VALUES (?,1,?,FALSE,0) ON CONFLICT(label) DO NOTHING",
                 (label, now),
             )
         # 再発しなかった既知の癖: 連続クリーン+1。3回連続で resolved
         if known_labels - set(recurring):
             placeholders = ",".join("?" * len(recurring)) if recurring else None
-            sql = "UPDATE weakness SET clean_streak=clean_streak+1 WHERE resolved=0"
+            sql = "UPDATE weakness SET clean_streak=clean_streak+1 WHERE resolved=FALSE"
             params: list = []
             if recurring:
                 sql += f" AND label NOT IN ({placeholders})"
                 params = recurring
             conn.execute(sql, params)
-            conn.execute("UPDATE weakness SET resolved=1 WHERE clean_streak>=3 AND resolved=0")
+            conn.execute("UPDATE weakness SET resolved=TRUE WHERE clean_streak>=3 AND resolved=FALSE")
     result["grade_id"] = grade_id
     return result

@@ -32,6 +32,10 @@ EXAM_B_START = date(2026, 11, 11)
 # 科目B 本番: 150分で4問中2問 → 1問あたり75分
 KAMOKU_B_TOTAL_MINUTES = 150
 
+# ビルド時に同梱した教材（scripts/build_materials.py の出力）。Vercel では静的配信もする
+MATERIALS_DIR = Path(os.environ.get("SC_MATERIALS_DIR", str(ROOT / "frontend" / "public" / "materials")))
+PUBLIC_MATERIALS_BASE = os.environ.get("SC_PUBLIC_MATERIALS_BASE", "/materials" if os.environ.get("VERCEL") else "")
+
 GRADER_MODEL = os.environ.get("SC_GRADER_MODEL", "claude-sonnet-4-6")
 
 # IPA 年度別過去問ページ。現行形式（科目B統合後）は R5秋 以降

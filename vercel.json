@@ -2,13 +2,17 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "cd frontend && npm ci",
-  "buildCommand": "cd frontend && npm run build",
+  "buildCommand": "(python3 -m pip --version || python3 -m ensurepip --user) && python3 -m pip install --quiet --user -r requirements.txt && python3 scripts/build_materials.py && cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/index.py": { "memory": 1024, "maxDuration": 300 }
+    "api/index.py": {
+      "memory": 1024,
+      "maxDuration": 300,
+      "includeFiles": "frontend/public/materials/{index.json,ipa/*.pdf}"
+    }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|materials/).*)", "destination": "/index.html" }
   ]
 }
