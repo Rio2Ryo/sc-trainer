@@ -10,7 +10,12 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-DATA_DIR = ROOT / "data"
+# Vercel（サーバレス）では書き込み可能なのは /tmp だけ。関数の再起動で消えるデモ用途。
+# 本番の学習はローカル実行（DESIGN.md §7）。
+if os.environ.get("VERCEL"):
+    DATA_DIR = Path("/tmp/sc-trainer-data")
+else:
+    DATA_DIR = ROOT / "data"
 IPA_DIR = DATA_DIR / "ipa"
 BOOKS_DIR = DATA_DIR / "books"
 PAGES_DIR = DATA_DIR / "pages"

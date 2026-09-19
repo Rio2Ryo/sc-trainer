@@ -53,3 +53,19 @@ python -m backend.services.ingest data/books/xxx.pdf
 - 問題 PDF は 1 回分 4 問が 1 ファイルなので、演習画面では全ページを表示する。対象の問までスクロールして読む
 - 採点時は問題 PDF 全体を API に送っている。コストが上振れしたら該当ページだけ送る最適化を入れる余地がある（DESIGN.md §8）
 - 採点モデルは `.env` の `SC_GRADER_MODEL` で差し替え可能（既定 `claude-sonnet-4-6`）
+
+## Vercel で試す（デモ用途）
+
+DESIGN.md §7 は「デプロイしない」なので、これは**動作を見るためのデモ**扱い。Vercel はサーバレスで永続ディスクがないため、次の制約がある。
+
+- SQLite と取得した PDF・ページ画像は `/tmp` に置かれ、**関数の再起動で消える**（答案・採点履歴も残らない）
+- 購入・自炊した教材（`data/books/`）は絶対にアップロードしない（DESIGN.md §0 原則4）
+- IPA 取得（45ファイル）と AI 採点は数分かかるので、`vercel.json` で `maxDuration: 300` にしている。プランで上限が低い場合は値を下げる（その場合は取得を年度ごとに分けるなどの工夫が要る）
+
+手順：
+
+1. https://vercel.com/new で `Rio2Ryo/sc-trainer` を Import（設定は `vercel.json` が持っているので Framework Preset は Other のまま）
+2. Environment Variables に `ANTHROPIC_API_KEY` を追加（採点に必要。未設定でも画面は動く）
+3. Deploy
+
+構成：`api/index.py` が FastAPI を Vercel Python Function として公開し、`/api/*` をそこへ、それ以外を `frontend/dist/index.html` へ rewrite している。

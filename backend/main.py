@@ -19,9 +19,8 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
+# サーバレスではリクエスト前に必ずスキーマがある状態にしたいので import 時に初期化する
+init_db()
 
 
 app.include_router(dashboard.router)
