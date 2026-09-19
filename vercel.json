@@ -7,8 +7,7 @@
   "functions": {
     "api/index.py": {
       "memory": 1024,
-      "maxDuration": 300,
-      "includeFiles": "frontend/public/materials/**"
+      "maxDuration": 300
     }
   },
   "rewrites": [
