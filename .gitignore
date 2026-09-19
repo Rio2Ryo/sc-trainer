@@ -21,3 +21,4 @@ frontend/tsconfig.tsbuildinfo
 
 # ビルド時に生成する同梱教材（IPA 公開 PDF とページ画像）。再生成できるのでコミットしない
 frontend/public/materials/
+frontend/public/build-log.txt

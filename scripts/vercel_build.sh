@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Vercel の buildCommand。教材の同梱生成 → フロントのビルド。失敗箇所が分かるよう逐一ログを出す。
-set -euo pipefail
+set -euxo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== python"
@@ -14,6 +14,6 @@ echo "== pip install (build deps)"
 echo "== build materials (IPA から取得→ページ画像→索引)"
 "$PY" scripts/build_materials.py
 
-echo "== frontend build"
-cd frontend && npm run build
-echo "== done"
+echo "== materials done"
+ls -la frontend/public/materials | head
+du -sh frontend/public/materials

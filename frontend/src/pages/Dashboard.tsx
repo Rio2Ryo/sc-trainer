@@ -33,6 +33,12 @@ export default function Dashboard() {
           Vercel のプロジェクト → Storage → Create Database → <b>Neon (Postgres)</b> を追加して再デプロイしてください（DATABASE_URL が自動で入ります）。
         </div>
       )}
+      {h && h.vercel && !h.bundled_materials && (
+        <div className="border border-red-400 bg-red-50 rounded p-3 text-sm">
+          <b>過去問の同梱に失敗しています。</b>ビルド時の IPA 取得か画像化で止まっています。
+          <a className="underline ml-1" href="/build-log.txt" target="_blank" rel="noreferrer">ビルドログを開く</a>
+        </div>
+      )}
       {h && !h.has_api_key && (
         <div className="border border-amber-400 bg-amber-50 rounded p-3 text-sm">
           <b>ANTHROPIC_API_KEY が未設定です。</b>演習はできますが AI 採点が動きません。

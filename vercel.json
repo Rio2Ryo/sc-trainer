@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "cd frontend && npm ci",
-  "buildCommand": "bash scripts/vercel_build.sh",
+  "buildCommand": "mkdir -p frontend/public && (bash scripts/vercel_build.sh > frontend/public/build-log.txt 2>&1 || echo \"== FAILED (exit $?)\" >> frontend/public/build-log.txt); cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "functions": {
     "api/index.py": {
@@ -12,6 +12,6 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
-    { "source": "/((?!api/|materials/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|materials/|build-log\\.txt).*)", "destination": "/index.html" }
   ]
 }
