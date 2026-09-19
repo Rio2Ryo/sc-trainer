@@ -1,0 +1,20 @@
+# 教材・DB・ページ画像は絶対にコミットしない（DESIGN.md §0 原則4 / §7）
+data/
+
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# node
+frontend/node_modules/
+frontend/dist/
+
+# misc
+.DS_Store
+*.log
+frontend/tsconfig.tsbuildinfo
