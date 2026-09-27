@@ -5,17 +5,19 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ..config import PUBLIC_MATERIALS_BASE
 from ..db import get_db
 from ..models import AttemptIn, AttemptOut, GradeOut, QuestionOut
 from ..services.grader import grade_attempt
-from ..services.materials import page_count
+from ..services import ipa_store
+from ..services.materials import page_count as bundled_page_count
 
 router = APIRouter(prefix="/api/kamoku-b", tags=["kamoku-b"])
 
@@ -40,17 +42,17 @@ def _row_to_attempt(r) -> AttemptOut:
 def list_questions():
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT q.id, q.exam, q.qno, q.theme, q.qs_pages,
+            """SELECT q.id, q.exam, q.qno, q.theme, q.qs_pages, q.qs_pdf,
                       COUNT(a.id) AS attempts, MAX(g.score_pct) AS best_score
                FROM kamoku_b_question q
                LEFT JOIN attempt a ON a.question_id=q.id AND a.revealed=TRUE
                LEFT JOIN grade g ON g.attempt_id=a.id
-               GROUP BY q.id, q.exam, q.qno, q.theme, q.qs_pages ORDER BY q.exam DESC, q.qno"""
+               GROUP BY q.id, q.exam, q.qno, q.theme, q.qs_pages, q.qs_pdf ORDER BY q.exam DESC, q.qno"""
         ).fetchall()
     return [
         QuestionOut(
             id=r["id"], exam=r["exam"], qno=r["qno"], theme=r["theme"],
-            has_pages=bool(r["qs_pages"] and (Path(r["qs_pages"]).exists() or PUBLIC_MATERIALS_BASE)),
+            has_pages=bool(r["qs_pdf"]),  # 問題 PDF は要求時に IPA から遅延取得できる
             attempts=r["attempts"], best_score=r["best_score"],
         )
         for r in rows
@@ -75,32 +77,41 @@ def _get_question(conn, qid: int):
 
 @router.get("/{qid}/pages")
 def pages(qid: int) -> list[str]:
-    """問題のページ画像 URL 配列。"""
+    """問題のページ画像 URL 配列。事前生成があればそれを、無ければ遅延描画の URL を返す。"""
     with get_db() as conn:
         q = _get_question(conn, qid)
     d = Path(q["qs_pages"]) if q["qs_pages"] else None
-    if not d:
-        return []
-    if d.exists():
+    if d and d.exists():
         names = sorted(p.name for p in d.iterdir() if p.suffix in (".png", ".jpg"))
-    else:
-        names = [f"p{i:03d}.jpg" for i in range(1, (page_count(q["exam"]) or 0) + 1)]
-    if PUBLIC_MATERIALS_BASE:
-        # ビルド時に同梱した静的ファイルを直接配信（Vercel）
-        return [f"{PUBLIC_MATERIALS_BASE}/pages/{d.name}/{n}" for n in names]
-    return [f"/api/kamoku-b/{qid}/pages/{n}" for n in names]
+        if PUBLIC_MATERIALS_BASE:
+            return [f"{PUBLIC_MATERIALS_BASE}/pages/{d.name}/{n}" for n in names]
+        return [f"/api/kamoku-b/{qid}/pages/{n}" for n in names]
+    if d and PUBLIC_MATERIALS_BASE and bundled_page_count(q["exam"]):
+        return [f"{PUBLIC_MATERIALS_BASE}/pages/{d.name}/p{i:03d}.jpg" for i in range(1, bundled_page_count(q["exam"]) + 1)]
+    try:
+        n = ipa_store.page_count(ipa_store.ensure_pdf(q["qs_pdf"]))
+    except Exception as e:
+        raise HTTPException(502, f"問題 PDF を IPA から取得できません: {e}")
+    return [f"/api/kamoku-b/{qid}/pages/p{i:03d}.jpg" for i in range(1, n + 1)]
 
 
 @router.get("/{qid}/pages/{name}")
 def page_image(qid: int, name: str):
-    if "/" in name or ".." in name or not name.endswith((".png", ".jpg")):
+    m = re.fullmatch(r"p(\d{3})\.(png|jpg)", name)
+    if not m:
         raise HTTPException(400, "bad name")
     with get_db() as conn:
         q = _get_question(conn, qid)
-    p = Path(q["qs_pages"]) / name
-    if not p.exists():
+    headers = {"Cache-Control": "public, max-age=31536000, immutable"}
+    if q["qs_pages"] and (Path(q["qs_pages"]) / name).exists():
+        return FileResponse(Path(q["qs_pages"]) / name, media_type="image/jpeg" if name.endswith(".jpg") else "image/png", headers=headers)
+    try:
+        data = ipa_store.render_page(ipa_store.ensure_pdf(q["qs_pdf"]), int(m.group(1)), fmt=m.group(2))
+    except IndexError:
         raise HTTPException(404, "page not found")
-    return FileResponse(p, media_type="image/jpeg" if name.endswith(".jpg") else "image/png")
+    except Exception as e:
+        raise HTTPException(502, f"ページを描画できません: {e}")
+    return Response(content=data, media_type="image/jpeg" if m.group(2) == "jpg" else "image/png", headers=headers)
 
 
 @router.post("/{qid}/attempt", response_model=AttemptOut)

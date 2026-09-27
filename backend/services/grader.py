@@ -35,7 +35,9 @@ def _question_block(q) -> dict:
     """問題 PDF を document ブロックにする。テキスト層がないので API 側で画像として読まれる。"""
     raw = read_material(q["qs_pdf"])
     if raw is None:
-        raise FileNotFoundError(f"問題 PDF が見つかりません: {q['qs_pdf']}")
+        from .ipa_store import ensure_pdf
+
+        raw = ensure_pdf(q["qs_pdf"]).read_bytes()
     data = base64.b64encode(raw).decode("ascii")
     return {
         "type": "document",

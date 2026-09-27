@@ -79,6 +79,12 @@ def _schema(pg: bool) -> list[str]:
   next_fix     TEXT NOT NULL,
   graded_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
+        """CREATE TABLE IF NOT EXISTS ipa_file (
+  name         TEXT PRIMARY KEY,
+  url          TEXT NOT NULL,
+  exam         TEXT,
+  kind         TEXT
+)""",
         f"""CREATE TABLE IF NOT EXISTS weakness (
   id           {pk},
   label        TEXT NOT NULL UNIQUE,

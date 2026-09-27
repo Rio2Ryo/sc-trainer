@@ -7,14 +7,21 @@ from fastapi import APIRouter, HTTPException
 
 from ..config import BOOKS_DIR, IPA_DIR
 from ..models import IngestIn
-from ..services import build_index, fetch_ipa, ingest
+from ..services import build_index, fetch_ipa, ingest, ipa_store
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
 
 @router.post("/fetch-ipa")
 def fetch() -> dict:
-    """IPA 過去問（約45ファイル）を data/ipa/ に取得し、続けて索引を組む。"""
+    """IPA の年度別ページからリンクを集め、解答例・講評だけ取得してテーマ索引を組む。
+    問題 PDF は演習画面を開いたときに遅延取得する（Vercel の実行時間内に収めるため）。"""
+    return ipa_store.build_index_lazy()
+
+
+@router.post("/fetch-ipa-all")
+def fetch_all() -> dict:
+    """ローカル用：45 ファイル全部を data/ipa/ に取得してから索引を組む。"""
     result = fetch_ipa.fetch_all()
     result["index"] = build_index.build()
     return result

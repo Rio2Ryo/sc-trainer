@@ -19,6 +19,7 @@ frontend/dist/
 *.log
 frontend/tsconfig.tsbuildinfo
 
-# ビルド時に生成する同梱教材（IPA 公開 PDF とページ画像）。再生成できるのでコミットしない
-frontend/public/materials/
+# 同梱教材（IPA 公開 PDF とページ画像）は GitHub Actions が生成してコミットする。
+# 中間ファイルだけ除外
+frontend/public/materials/**/ingest.json
 frontend/public/build-log.txt
