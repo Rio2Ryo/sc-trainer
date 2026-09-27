@@ -58,7 +58,7 @@ python -m backend.services.ingest data/books/xxx.pdf
 
 Vercel はサーバレスで永続ディスクがないため、次の2点で対応している。
 
-- **過去問はビルド時に同梱**する。`vercel.json` の buildCommand が `scripts/build_materials.py` を実行し、IPA 公式 PDF の取得→ページ画像化（150dpi JPEG）→テーマ索引を `frontend/public/materials/` に生成して静的配信する。実行時の取得は不要
+- **過去問は実行時に IPA から遅延取得**する。初回（または DB 未設定でのコールドスタート後）にダッシュボードが自動で解答例・講評を取得してテーマ索引を作る（1 分ほど）。問題 PDF は演習画面を開いたときに取得し、ページ画像はその場で描画してキャッシュする
 - **記録は Postgres に保存**する。`DATABASE_URL`（または `POSTGRES_URL`）があれば Postgres、無ければ SQLite（Vercel では `/tmp` なので消える）
 
 セットアップ（初回のみ）：
@@ -72,5 +72,5 @@ Vercel はサーバレスで永続ディスクがないため、次の2点で対
 
 注意：
 
-- 購入・自炊した教材（`data/books/`）は Vercel に上げない（DESIGN.md §0 原則4）。同梱するのは IPA が公開している PDF だけ
+- 購入・自炊した教材（`data/books/`）は Vercel に上げない（DESIGN.md §0 原則4）。取得するのは IPA が公開している PDF だけ
 - AI 採点は 1〜2 分かかるので `maxDuration: 300` にしている。プランの上限が低い場合は値を下げる
