@@ -56,6 +56,10 @@ python -m backend.services.ingest data/books/xxx.pdf
 
 ## Vercel で使う
 
+本番 URL: **https://sc-trainer.vercel.app**
+
+デプロイごとの URL（`sc-trainer-xxxxxxx-commongiftedtokyo.vercel.app`）は Vercel の Deployment Protection でログインを求められる。普段は上の本番 URL を使う。本番 URL でもログイン画面が出る場合は、プロジェクト → Settings → Deployment Protection → Vercel Authentication を Disabled にする。
+
 Vercel はサーバレスで永続ディスクがないため、次の2点で対応している。
 
 - **過去問は実行時に IPA から遅延取得**する。初回（または DB 未設定でのコールドスタート後）にダッシュボードが自動で解答例・講評を取得してテーマ索引を作る（1 分ほど）。問題 PDF は演習画面を開いたときに取得し、ページ画像はその場で描画してキャッシュする
