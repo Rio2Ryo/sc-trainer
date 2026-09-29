@@ -97,6 +97,11 @@ def grade_attempt(attempt_id: int) -> dict:
         if not attempt["revealed"]:
             raise PermissionError("答案を確定するまで採点できません")
         q = conn.execute("SELECT * FROM kamoku_b_question WHERE id=?", (attempt["question_id"],)).fetchone()
+    from .ipa_store import ensure_answer_md
+
+    ans, cmnt = ensure_answer_md(q)
+    q = {**dict(q), "ans_md": ans, "cmnt_md": cmnt}
+    with get_db() as conn:
         known = _known_weaknesses(conn)
 
     client = anthropic.Anthropic()

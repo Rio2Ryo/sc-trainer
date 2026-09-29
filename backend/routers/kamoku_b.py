@@ -40,6 +40,9 @@ def _row_to_attempt(r) -> AttemptOut:
 
 @router.get("/questions", response_model=list[QuestionOut])
 def list_questions():
+    built = ipa_store.ensure_index()
+    if ipa_store.question_count() == 0:
+        raise HTTPException(502, {"message": "IPA から過去問の索引を作れませんでした", "result": built})
     with get_db() as conn:
         rows = conn.execute(
             """SELECT q.id, q.exam, q.qno, q.theme, q.qs_pages, q.qs_pdf,
@@ -61,6 +64,7 @@ def list_questions():
 
 @router.get("/by-exam/{exam}/{qno}")
 def by_exam(exam: str, qno: int) -> dict:
+    ipa_store.ensure_index()
     with get_db() as conn:
         r = conn.execute("SELECT id, exam, qno, theme FROM kamoku_b_question WHERE exam=? AND qno=?", (exam, qno)).fetchone()
     if not r:
@@ -147,7 +151,8 @@ def answer(qid: int) -> dict:
         ).fetchone()
     if not ok:
         raise HTTPException(404, "答案を確定するまで解答例は開けません")
-    return {"exam": q["exam"], "qno": q["qno"], "ans_md": q["ans_md"], "cmnt_md": q["cmnt_md"]}
+    ans, cmnt = ipa_store.ensure_answer_md(q)
+    return {"exam": q["exam"], "qno": q["qno"], "ans_md": ans, "cmnt_md": cmnt}
 
 
 @router.post("/attempt/{attempt_id}/grade")

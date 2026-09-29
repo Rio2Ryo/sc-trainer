@@ -14,7 +14,7 @@ import requests
 from ..config import IPA_DIR, IPA_YEARS, PAGES_DIR
 from ..db import get_db
 from .build_index import parse_name
-from .fetch_ipa import UA, list_pdf_links
+from .fetch_ipa import HEADERS, list_pdf_links
 
 
 def refresh_links(years: list[str] | None = None) -> dict:
@@ -61,7 +61,7 @@ def ensure_pdf(name_or_path: str) -> Path:
         url = known_url(name)
     if not url:
         raise FileNotFoundError(f"IPA のリンク一覧に {name} がありません")
-    r = requests.get(url, headers={"User-Agent": UA}, timeout=120)
+    r = requests.get(url, headers=HEADERS, timeout=120)
     r.raise_for_status()
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(r.content)
@@ -134,3 +134,47 @@ def build_index_lazy() -> dict:
                           "qs_pages": None, "ans_md": ans_md, "cmnt_md": cmnt_md})
     n = upsert(items)
     return {"links": link_result, "exams": sorted(groups), "questions_upserted": n, "errors": errors}
+
+
+_last_error: dict | None = None
+
+
+def question_count() -> int:
+    with get_db() as conn:
+        return int(conn.execute("SELECT COUNT(*) FROM kamoku_b_question").fetchone()[0])
+
+
+def ensure_index() -> dict | None:
+    """科目B の索引が空なら、その場で IPA から作る。
+    Vercel ではインスタンスごとに /tmp の DB が別になり得るので、どの入口からでも自己修復させる。
+    戻り値は構築した場合の結果（空のままなら errors 入り）。"""
+    global _last_error
+    if question_count() > 0:
+        return None
+    result = build_index_lazy()
+    if question_count() == 0:
+        _last_error = result
+    return result
+
+
+def last_error() -> dict | None:
+    return _last_error
+
+
+def ensure_answer_md(q) -> tuple[str | None, str | None]:
+    """解答例・講評が DB に無ければ取得して埋める。"""
+    ans, cmnt = q["ans_md"], q["cmnt_md"]
+    if ans and cmnt:
+        return ans, cmnt
+    stem = Path(q["qs_pdf"]).name.replace("_qs.pdf", "")
+    try:
+        ans = ans or extract_text(ensure_pdf(f"{stem}_ans.pdf"))
+    except Exception:
+        pass
+    try:
+        cmnt = cmnt or extract_text(ensure_pdf(f"{stem}_cmnt.pdf"))
+    except Exception:
+        pass
+    with get_db() as conn:
+        conn.execute("UPDATE kamoku_b_question SET ans_md=?, cmnt_md=? WHERE exam=?", (ans, cmnt, q["exam"]))
+    return ans, cmnt

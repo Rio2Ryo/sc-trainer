@@ -25,7 +25,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...init });
   if (!r.ok) {
     let msg = `${r.status}`;
-    try { msg = (await r.json()).detail ?? msg; } catch { /* ignore */ }
+    try {
+      const d = (await r.json()).detail;
+      if (d !== undefined) msg = typeof d === "string" ? d : JSON.stringify(d, null, 1);
+    } catch { /* ignore */ }
     throw new Error(msg);
   }
   return r.json();
@@ -49,6 +52,7 @@ export const api = {
   grade: (attemptId: number) => req<GradeResult>(`/api/kamoku-b/attempt/${attemptId}/grade`, { method: "POST" }),
   grades: (attemptId: number) => req<{ id: number; detail: GradeResult; score_pct: number | null; next_fix: string; graded_at: string }[]>(`/api/kamoku-b/attempt/${attemptId}/grade`),
   weakness: () => req<{ id: number; label: string; count: number; last_seen: string | null; resolved: boolean }[]>("/api/weakness"),
+  diagnose: () => req<Record<string, unknown>>("/api/materials/diagnose"),
   fetchIpa: () => req<Record<string, unknown>>("/api/materials/fetch-ipa", { method: "POST" }),
   buildIndex: () => req<Record<string, unknown>>("/api/materials/build-index", { method: "POST" }),
 };

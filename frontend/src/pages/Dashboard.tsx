@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, Dashboard as D, Health } from "../api";
 
@@ -12,13 +12,6 @@ export default function Dashboard() {
 
   const load = () => api.dashboard().then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { load(); api.health().then(setH).catch(() => {}); }, []);
-
-  // 過去問が 1 問も無ければ自動で IPA から索引を作る（初回・DB 未設定でのコールドスタート後）
-  const autoRan = useRef(false);
-  useEffect(() => {
-    if (d && d.kamoku_b.total === 0 && !autoRan.current && !busy) { autoRan.current = true; fetchIpa(); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d]);
 
   const fetchIpa = async () => {
     setBusy(true); setMsg("IPA から過去問の索引を作成中（解答例・講評 10 ファイル、1 分ほど）。このまま待ってください…");

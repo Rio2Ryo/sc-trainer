@@ -47,6 +47,13 @@ def ingest_pdf(body: IngestIn) -> dict:
     return ingest.ingest(p, kind=body.kind)
 
 
+@router.get("/diagnose")
+def diagnose() -> dict:
+    """Vercel 上から IPA に届くか、リンクが拾えるかを返す。"""
+    return {"years": fetch_ipa.diagnose(), "question_count": ipa_store.question_count(),
+            "last_error": ipa_store.last_error()}
+
+
 @router.get("/status")
 def status() -> dict:
     return {

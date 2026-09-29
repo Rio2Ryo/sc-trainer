@@ -74,7 +74,7 @@ export default function KamokuB() {
       <div className="flex-1 grid grid-cols-[3fr_2fr_2fr] min-h-0">
         {/* 問題ペイン: ページ画像を縦スクロール。印刷させない。 */}
         <section className="overflow-y-auto bg-neutral-200 p-2 space-y-2">
-          {pages.length === 0 && <p className="text-sm text-neutral-600 p-2">ページ画像がありません。</p>}
+          {pages.length === 0 && !err && <p className="text-sm text-neutral-600 p-2">問題を IPA から取得中…（初回は 10〜30 秒）</p>}
           {pages.map((src, i) => (
             <img key={src} src={src} alt={`p.${i + 1}`} loading="lazy" className="w-full bg-white shadow" />
           ))}
