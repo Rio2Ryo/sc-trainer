@@ -22,51 +22,62 @@ export default function KamokuBList() {
   };
 
   if (err) return (
-    <main className="max-w-3xl mx-auto p-4 space-y-3 text-sm">
-      <h1 className="text-xl font-bold">科目B 過去問</h1>
-      <div className="border border-red-400 bg-red-50 rounded p-3">
+    <main className="max-w-3xl mx-auto p-4 space-y-3">
+      <h1 className="text-lg font-bold">科目B 過去問</h1>
+      <div className="border border-red-300 bg-red-50 rounded-xl p-3 text-sm">
         <b>過去問を読み込めませんでした。</b>
-        <pre className="whitespace-pre-wrap text-xs mt-2 max-h-64 overflow-auto">{err}</pre>
+        <pre className="whitespace-pre-wrap break-all text-xs mt-2 max-h-64 overflow-auto">{err}</pre>
       </div>
-      <div className="flex gap-2">
-        <button onClick={load} className="px-3 py-1.5 rounded bg-neutral-900 text-white">再試行</button>
-        <button onClick={runDiag} disabled={diagBusy} className="px-3 py-1.5 rounded border bg-white disabled:opacity-50">
-          {diagBusy ? "診断中…" : "IPA への接続を診断"}
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={load} className="py-3 rounded-xl bg-neutral-900 text-white">再試行</button>
+        <button onClick={runDiag} disabled={diagBusy} className="py-3 rounded-xl border bg-white disabled:opacity-50">
+          {diagBusy ? "診断中…" : "接続を診断"}
         </button>
       </div>
-      {diag && <pre className="whitespace-pre-wrap text-xs bg-neutral-100 rounded p-2 max-h-[60vh] overflow-auto">{diag}</pre>}
-      <p className="text-neutral-500">この画面のスクリーンショット（診断結果を含む）を送ってもらえれば原因を特定できます。</p>
+      {diag && <pre className="whitespace-pre-wrap break-all text-xs bg-neutral-100 rounded-xl p-3 max-h-[60vh] overflow-auto">{diag}</pre>}
     </main>
   );
   if (qs === null) return (
-    <main className="max-w-3xl mx-auto p-4 text-sm">
-      <h1 className="text-xl font-bold mb-2">科目B 過去問</h1>
-      <p>読み込み中…　初回は IPA から過去問の索引を作るので 30 秒〜1 分かかります。</p>
+    <main className="max-w-3xl mx-auto p-4">
+      <h1 className="text-lg font-bold mb-2">科目B 過去問</h1>
+      <p className="text-neutral-600">読み込み中…<br />初回は IPA から索引を作るので 30 秒〜1 分かかります。</p>
     </main>
   );
 
   const byExam = qs.reduce<Record<string, Question[]>>((m, q) => ((m[q.exam] ??= []).push(q), m), {});
+  const done = qs.filter((q) => q.attempts > 0).length;
 
   return (
-    <main className="max-w-3xl mx-auto p-4 space-y-4">
-      <h1 className="text-xl font-bold">科目B 過去問（{qs.length} 問）</h1>
+    <main className="max-w-3xl mx-auto p-4 space-y-5">
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-lg font-bold">科目B 過去問</h1>
+        <span className="text-sm text-neutral-500">演習済み {done} / {qs.length}</span>
+      </div>
       {Object.entries(byExam).map(([exam, list]) => (
-        <section key={exam} className="bg-white rounded border">
-          <div className="px-4 py-2 border-b font-semibold">{exam}</div>
-          <table className="w-full text-sm">
-            <tbody>
-              {list.map((q) => (
-                <tr key={q.id} className="border-b last:border-0">
-                  <td className="px-4 py-2 w-14">問{q.qno}</td>
-                  <td className="px-2 py-2">{q.theme ?? <span className="text-neutral-400">テーマ未抽出</span>}</td>
-                  <td className="px-2 py-2 text-neutral-500 w-28">{q.attempts} 回 / 最高 {q.best_score ?? "—"}%</td>
-                  <td className="px-2 py-2 w-24 text-right">
-                    <Link className="underline" to={`/kamoku-b/${encodeURIComponent(exam)}/${q.qno}`}>演習</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <section key={exam}>
+          <h2 className="text-sm font-semibold text-neutral-500 mb-2 px-1">{exam}</h2>
+          <ul className="space-y-2">
+            {list.map((q) => (
+              <li key={q.id}>
+                <Link to={`/kamoku-b/${encodeURIComponent(exam)}/${q.qno}`}
+                  className="block bg-white rounded-xl border p-4 active:bg-neutral-100">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold">問{q.qno}</span>
+                    {q.attempts > 0 ? (
+                      <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${(q.best_score ?? 0) >= 60 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                        {q.attempts}回・最高 {q.best_score ?? "—"}%
+                      </span>
+                    ) : (
+                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">未演習</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-neutral-700 leading-relaxed">
+                    {q.theme ?? <span className="text-neutral-400">テーマ未抽出</span>}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ))}
     </main>

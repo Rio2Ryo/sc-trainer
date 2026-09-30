@@ -7,81 +7,77 @@ export default function Dashboard() {
   const [d, setD] = useState<D | null>(null);
   const [h, setH] = useState<Health | null>(null);
   const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
 
-  const load = () => api.dashboard().then(setD).catch((e) => setErr(String(e)));
-  useEffect(() => { load(); api.health().then(setH).catch(() => {}); }, []);
-
-  const fetchIpa = async () => {
-    setBusy(true); setMsg("IPA から過去問の索引を作成中（解答例・講評 10 ファイル、1 分ほど）。このまま待ってください…");
-    try {
-      const r = await api.fetchIpa() as { exams?: string[]; questions_upserted?: number; errors?: unknown[]; links?: { errors?: unknown[] } };
-      const errs = [...(r.errors ?? []), ...(r.links?.errors ?? [])];
-      setMsg(`取得完了: ${r.exams?.join(", ")} / ${r.questions_upserted} 問` + (errs.length ? `\nエラー: ${JSON.stringify(errs)}` : ""));
-      load();
-    } catch (e) { setMsg(String(e)); } finally { setBusy(false); }
-  };
+  useEffect(() => {
+    api.dashboard().then(setD).catch((e) => setErr(String(e)));
+    api.health().then(setH).catch(() => {});
+  }, []);
 
   if (err) return <p className="p-4 text-red-700">{err}</p>;
-  if (!d) return <p className="p-4">読み込み中…</p>;
+  if (!d) return <p className="p-4 text-neutral-500">読み込み中…</p>;
 
   return (
-    <main className="max-w-3xl mx-auto p-4 space-y-6">
+    <main className="max-w-3xl mx-auto p-4 space-y-4">
       {h && !h.db_persistent && (
-        <div className="border border-red-400 bg-red-50 rounded p-3 text-sm">
-          <b>DB が未設定です。</b>答案・採点・弱点の記録は保存されず、しばらくすると消えます。
-          Vercel のプロジェクト → Storage → Create Database → <b>Neon (Postgres)</b> を追加して再デプロイしてください（DATABASE_URL が自動で入ります）。
+        <div className="border border-red-300 bg-red-50 rounded-xl p-3 text-sm leading-relaxed">
+          <b>記録が保存されない設定です。</b>答案・採点・弱点はしばらくすると消えます。
+          Vercel → Storage → <b>Neon</b> を追加して Redeploy してください。
         </div>
       )}
       {h && !h.has_api_key && (
-        <div className="border border-amber-400 bg-amber-50 rounded p-3 text-sm">
-          <b>ANTHROPIC_API_KEY が未設定です。</b>演習はできますが AI 採点が動きません。
-          Vercel のプロジェクト → Settings → Environment Variables に追加して再デプロイしてください。
+        <div className="border border-amber-300 bg-amber-50 rounded-xl p-3 text-sm leading-relaxed">
+          <b>AI 採点が使えません。</b>Vercel → Settings → Environment Variables に <code>ANTHROPIC_API_KEY</code> を追加して Redeploy してください。
         </div>
       )}
-      <section className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded border p-4">
-          <div className="text-sm text-neutral-500">科目A まで</div>
-          <div className="text-6xl font-bold">{d.days_to_a}<span className="text-xl ml-1">日</span></div>
+
+      <section className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-xs text-neutral-500">科目A まで</div>
+          <div className="text-5xl font-bold tabular-nums">{d.days_to_a}<span className="text-base ml-1">日</span></div>
         </div>
-        <div className="bg-white rounded border p-4">
-          <div className="text-sm text-neutral-500">科目B まで</div>
-          <div className="text-6xl font-bold">{d.days_to_b}<span className="text-xl ml-1">日</span></div>
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-xs text-neutral-500">科目B まで</div>
+          <div className="text-5xl font-bold tabular-nums">{d.days_to_b}<span className="text-base ml-1">日</span></div>
         </div>
       </section>
 
-      <section className="bg-white rounded border p-4 space-y-1 text-sm">
-        <div>今日の復習: <b>{d.review_due}</b> 枚（連続 {d.review_streak_days} 日）<span className="text-neutral-400 ml-2">※復習画面は Phase 2</span></div>
-        <div>科目B: 演習済み <b>{d.kamoku_b.done}</b> / {d.kamoku_b.total} 問、平均得点率 <b>{d.kamoku_b.avg_score_pct ?? "—"}</b>%</div>
-      </section>
-
-      <section className="bg-white rounded border p-4">
-        <div className="text-sm text-neutral-500 mb-1">次に直す1点</div>
+      <section className="bg-neutral-900 text-white rounded-xl p-4">
+        <div className="text-xs text-neutral-400 mb-1">次に直す1点</div>
         {d.next_fix ? (
-          <div><span className="text-lg font-semibold">{d.next_fix.next_fix}</span>
-            <span className="text-xs text-neutral-500 ml-2">{d.next_fix.exam} 問{d.next_fix.qno}</span></div>
+          <>
+            <div className="text-lg font-bold leading-snug">{d.next_fix.next_fix}</div>
+            <div className="text-xs text-neutral-400 mt-1">{d.next_fix.exam} 問{d.next_fix.qno} の採点より</div>
+          </>
         ) : <div className="text-neutral-400">まだ採点がありません</div>}
       </section>
 
-      <section className="bg-white rounded border p-4">
-        <div className="text-sm text-neutral-500 mb-1">再発中の癖</div>
-        {d.top_weakness.length === 0 ? <div className="text-neutral-400">なし</div> : (
-          <ol className="list-decimal ml-5">
-            {d.top_weakness.map((w) => <li key={w.label}>{w.label} <span className="text-neutral-500">×{w.count}</span></li>)}
+      <section className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-xs text-neutral-500">科目B 演習済み</div>
+          <div className="text-3xl font-bold tabular-nums">{d.kamoku_b.done}<span className="text-base text-neutral-400"> / {d.kamoku_b.total || 20}</span></div>
+        </div>
+        <div className="bg-white rounded-xl border p-4">
+          <div className="text-xs text-neutral-500">平均得点率（合格 60%）</div>
+          <div className={`text-3xl font-bold tabular-nums ${d.kamoku_b.avg_score_pct == null ? "" : d.kamoku_b.avg_score_pct >= 60 ? "text-green-700" : "text-red-700"}`}>
+            {d.kamoku_b.avg_score_pct ?? "—"}<span className="text-base">%</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white rounded-xl border p-4">
+        <div className="text-xs text-neutral-500 mb-2">再発中の癖</div>
+        {d.top_weakness.length === 0 ? <div className="text-neutral-400 text-sm">なし</div> : (
+          <ol className="space-y-2">
+            {d.top_weakness.map((w) => (
+              <li key={w.label} className="flex gap-2 text-sm leading-snug">
+                <span className="shrink-0 font-bold text-red-700">×{w.count}</span><span>{w.label}</span>
+              </li>
+            ))}
           </ol>
         )}
       </section>
 
-      <section className="flex gap-3 items-center text-sm">
-        <Link to="/kamoku-b" className="px-4 py-2 rounded bg-neutral-900 text-white">科目B 演習へ</Link>
-        {d.kamoku_b.total === 0 && (
-          <button disabled={busy} onClick={fetchIpa} className="px-4 py-2 rounded border bg-white disabled:opacity-50">
-            IPA 過去問を取得して索引を作る
-          </button>
-        )}
-      </section>
-      {msg && <pre className="text-xs bg-neutral-100 p-2 rounded whitespace-pre-wrap">{msg}</pre>}
+      <Link to="/kamoku-b" className="block text-center py-4 rounded-xl bg-neutral-900 text-white font-bold">科目B を演習する</Link>
     </main>
   );
 }

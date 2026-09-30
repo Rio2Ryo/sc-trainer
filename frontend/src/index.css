@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+/* スマホ前提：iOS で入力時に勝手にズームしないよう入力欄は 16px 以上 */
+html { -webkit-text-size-adjust: 100%; }
+body { font-size: 16px; line-height: 1.6; }
+textarea, input, select { font-size: 16px; }
+/* ホームバーと重ならないように */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
